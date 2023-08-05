@@ -7,7 +7,7 @@ Pour ce faire j'ai utiliser la librairie [discordgo](github.com/bwmarrin/discord
 ## Installation
 
 ```bash
-git clone
+git clone https://github.com/StanislasSiweck/BotWatchman.git
 ```
 
 ## Usage
