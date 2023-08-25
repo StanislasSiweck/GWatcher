@@ -51,8 +51,8 @@ func InteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 // If there are any errors along the way, these are logged.
 func addServerCommand(s *discordgo.Session, i *discordgo.InteractionCreate, data discordgo.ApplicationCommandInteractionData) {
 	server := sql.Server{
-		IP:   data.Options[1].StringValue(),
-		Port: data.Options[2].StringValue(),
+		IP:   data.Options[0].StringValue(),
+		Port: data.Options[1].StringValue(),
 	}
 
 	if err := sql.AddServer(server); err != nil { // Create the server in the database
