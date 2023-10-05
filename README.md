@@ -2,7 +2,8 @@
 
 Ce bot discord est pour surveiller des serveur de jeux (principallement garry's mod) sans besoin de lancer le jeux en question pour voir si le serveur est en ligne, le nombre de joueur, le nom du serveur, ect...
 Envoyer les info sur un channel discord et les mettre a jour toute les 1 minutes, ce projet étais pour m'entrainer a faire des bots discord en golang.
-Pour ce faire j'ai utiliser la librairie [discordgo](github.com/bwmarrin/discordgo) pour l'api discord, [Source A2S Queries](github.com/rumblefrog/go-a2s) pour les requêtes A2S pour les [Serveur Source](https://developer.valvesoftware.com/wiki/Server_queries) 
+Pour ce faire j'ai utiliser la librairie [discordgo](github.com/bwmarrin/discordgo) pour l'api discord, [Source A2S Queries](github.com/rumblefrog/go-a2s) pour les requêtes A2S pour les [Serveur Source](https://developer.valvesoftware.com/wiki/Server_queries).
+Les commentaires ont été générés de manière automatique.
 
 ## Installation
 
