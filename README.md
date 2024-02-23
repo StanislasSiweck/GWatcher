@@ -15,7 +15,7 @@ git clone https://github.com/StanislasSiweck/BotWatchman.git
 
 Ajouter les variables d'environnement suivante (la base de donnée est optionnel):
 ```bash
-export BOT_TOKEN=token
+export DISCORD_TOKEN=token
 export DISCORD_CHANEL_ID=channel_id
 
 export DB_HOST=host
@@ -28,4 +28,16 @@ export DB_DATABASE=name
 Lancer le bot:
 ```bash
 go run main.go
+```
+
+## Docker
+
+Récupérer l'image:
+```bash
+docker pull docker.pkg.github.com/stanislassiweck/botwatchman/watchman:latest
+```
+
+Lancer le container:
+```bash
+docker run -d --name botwatchman -e DISCORD_TOKEN=token -e DISCORD_CHANEL_ID=channel_id
 ```
