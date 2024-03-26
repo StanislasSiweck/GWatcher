@@ -2,7 +2,6 @@ package main
 
 import (
 	"bot-serveur-info/discord"
-	"bot-serveur-info/serveur"
 	"bot-serveur-info/sql"
 	"github.com/bwmarrin/discordgo"
 	"log"
@@ -23,7 +22,7 @@ func main() {
 		sql.DB.Find(&server)
 
 		for _, s := range server {
-			discord.AllServers[s.IP+":"+s.Port] = s
+			discord.AllServers = append(discord.AllServers, s)
 		}
 	}
 
@@ -44,27 +43,26 @@ func main() {
 
 	discord.DG.AddHandler(discord.InteractionCreate)
 
-	var mes *discordgo.Message
 	messageId := os.Getenv("DISCORD_MESSAGE_ID")
 
 	if messageId != "" {
-		mes, err = discord.DG.ChannelMessage(os.Getenv("DISCORD_CHANEL_ID"), messageId)
+		discord.Mes, err = discord.DG.ChannelMessage(os.Getenv("DISCORD_CHANEL_ID"), messageId)
 		if err != nil {
 			log.Fatal("Error getting message :", err)
 		}
-		if mes.Author.ID != discord.DG.State.User.ID {
-			mes = nil
+		if discord.Mes.Author.ID != discord.DG.State.User.ID {
+			discord.Mes = nil
 		}
 	}
 
-	if mes == nil {
-		mes, err = discord.DG.ChannelMessageSend(os.Getenv("DISCORD_CHANEL_ID"), "🤔")
+	if discord.Mes == nil {
+		discord.Mes, err = discord.DG.ChannelMessageSend(os.Getenv("DISCORD_CHANEL_ID"), "🤔")
 		if err != nil {
 			log.Fatal("Error sending message :", err)
 		}
 	}
 
-	go serveur.GetServerInfo(mes)
+	go discord.RefreshServerInfo()
 
 	log.Println("Bot is now running.  Press CTRL-C to exit.")
 	stop := make(chan os.Signal, 1)
@@ -76,42 +74,48 @@ func main() {
 var (
 	commands = []*discordgo.ApplicationCommand{
 		{
-			Name:        "addserver",
-			Description: "Add a server to the list",
-			Type:        discordgo.ChatApplicationCommand,
+			Name: "server",
 			Options: []*discordgo.ApplicationCommandOption{
 				{
-					Name:        "ip",
-					Description: "Server IP",
-					Type:        discordgo.ApplicationCommandOptionString,
-					Required:    true,
+					Name:        "add",
+					Description: "Add a server",
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Name:        "ip",
+							Description: "Server IP",
+							Type:        discordgo.ApplicationCommandOptionString,
+							Required:    true,
+						},
+						{
+							Name:        "port",
+							Description: "Server port",
+							Type:        discordgo.ApplicationCommandOptionString,
+							Required:    true,
+						},
+					},
 				},
 				{
-					Name:        "port",
-					Description: "Server port",
-					Type:        discordgo.ApplicationCommandOptionString,
-					Required:    true,
+					Name:        "remove",
+					Description: "Remove a server",
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Name:        "ip",
+							Description: "Server IP",
+							Type:        discordgo.ApplicationCommandOptionString,
+							Required:    true,
+						},
+						{
+							Name:        "port",
+							Description: "Server port",
+							Type:        discordgo.ApplicationCommandOptionString,
+							Required:    true,
+						},
+					},
 				},
 			},
-		},
-		{
-			Name:        "removeserver",
-			Description: "Remove a server from the list",
-			Type:        discordgo.ChatApplicationCommand,
-			Options: []*discordgo.ApplicationCommandOption{
-				{
-					Name:        "ip",
-					Description: "Server IP",
-					Type:        discordgo.ApplicationCommandOptionString,
-					Required:    true,
-				},
-				{
-					Name:        "port",
-					Description: "Server port",
-					Type:        discordgo.ApplicationCommandOptionString,
-					Required:    true,
-				},
-			},
+			Description: "Add or remove a server",
 		},
 	}
 )
