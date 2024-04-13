@@ -44,12 +44,24 @@ func main() {
 
 	discord.DG.AddHandler(discord.InteractionCreate)
 
-	channelID := os.Getenv("DISCORD_CHANEL_ID")
-	message := "🤔"
+	var mes *discordgo.Message
+	messageId := os.Getenv("DISCORD_MESSAGE_ID")
 
-	mes, err := discord.DG.ChannelMessageSend(channelID, message)
-	if err != nil {
-		log.Fatal("Error sending message :", err)
+	if messageId != "" {
+		mes, err = discord.DG.ChannelMessage(os.Getenv("DISCORD_CHANEL_ID"), messageId)
+		if err != nil {
+			log.Fatal("Error getting message :", err)
+		}
+		if mes.Author.ID != discord.DG.State.User.ID {
+			mes = nil
+		}
+	}
+
+	if mes == nil {
+		mes, err = discord.DG.ChannelMessageSend(os.Getenv("DISCORD_CHANEL_ID"), "🤔")
+		if err != nil {
+			log.Fatal("Error sending message :", err)
+		}
 	}
 
 	go serveur.GetServerInfo(mes)

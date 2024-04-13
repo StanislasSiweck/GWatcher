@@ -13,16 +13,22 @@ git clone https://github.com/StanislasSiweck/BotWatchman.git
 
 ## Usage
 
-Ajouter les variables d'environnement suivante (la base de donnée est optionnel):
+Ajouter les variables d'environnement suivante:
 ```bash
 export DISCORD_TOKEN=token
 export DISCORD_CHANEL_ID=channel_id
 
+-- Optionnel MESSAGE
+export DISCORD_MESSAGE_ID=message_id
+
+-- Optionnel DB
 export DB_HOST=host
 export DB_PORT=port
 export DB_USERNAME=username
 export DB_PASSWORD=password
 export DB_DATABASE=name
+
+
 ```
 
 Lancer le bot:
