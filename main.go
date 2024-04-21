@@ -1,8 +1,12 @@
 package main
 
 import (
-	"bot-serveur-info/discord"
-	"bot-serveur-info/sql"
+	"bot-serveur-info/internal/discord"
+	"bot-serveur-info/internal/pkg/class"
+	"bot-serveur-info/internal/pkg/session"
+	"bot-serveur-info/internal/pkg/sql"
+	"bot-serveur-info/internal/pkg/sql/model"
+	"bot-serveur-info/internal/pkg/sql/request"
 	"github.com/bwmarrin/discordgo"
 	"log"
 	"os"
@@ -11,22 +15,22 @@ import (
 )
 
 func main() {
-	discord.NewAuth()
-	defer discord.DG.Close()
+	session.NewAuth()
+	defer session.DG.Close()
 
 	if err := sql.ConnectDB(); err == nil {
 		if err := sql.Migrate(); err != nil {
 			log.Fatal(err)
 		}
 
-		guilds, err := sql.GetGuildsWithServers()
+		guilds, err := request.GetGuildsWithServers()
 		if err != nil {
 			log.Fatal(err)
 		}
 
 		for _, guild := range guilds {
-			newGuild := discord.NewGuild(guild.ID, guild.ChannelID, guild.MessageID, false)
-			newGuild.SetDisplayInfo(discord.NewDisplay(guild.Servers, 0))
+			newGuild := class.InitGuild(guild.ID, guild.ChannelID, guild.MessageID, false)
+			newGuild.SetDisplayInfo(class.NewDisplay(guild.Servers, 0))
 			discord.Guilds[strconv.Itoa(int(guild.ID))] = newGuild
 		}
 	}
@@ -36,12 +40,12 @@ func main() {
 		log.Fatal(err)
 	}
 
-	discord.DG.AddHandler(discord.InteractionCreate)
+	session.DG.AddHandler(discord.InteractionCreate)
 
 	BDD, _ := sql.DB.DB()
 	if BDD.Ping() == nil {
-		discord.DG.AddHandler(discord.GuildCreate)
-		discord.DG.AddHandler(discord.GuildDelete)
+		session.DG.AddHandler(discord.GuildCreate)
+		session.DG.AddHandler(discord.GuildDelete)
 	} else {
 		localUsage(err)
 	}
@@ -60,44 +64,44 @@ func localUsage(err error) {
 	messageId := os.Getenv("DISCORD_MESSAGE_ID")
 
 	if messageId != "" {
-		mes, err = discord.DG.ChannelMessage(os.Getenv("DISCORD_CHANEL_ID"), messageId)
+		mes, err = session.DG.ChannelMessage(os.Getenv("DISCORD_CHANEL_ID"), messageId)
 		if err != nil {
 			log.Fatal("Error getting message :", err)
 		}
 
-		if mes.Author.ID != discord.DG.State.User.ID {
+		if mes.Author.ID != session.DG.State.User.ID {
 			mes = nil
 		}
 	}
 
 	if mes == nil {
-		mes, err = discord.DG.ChannelMessageSend(os.Getenv("DISCORD_CHANEL_ID"), "🤔")
+		mes, err = session.DG.ChannelMessageSend(os.Getenv("DISCORD_CHANEL_ID"), "🤔")
 		if err != nil {
 			log.Fatal("Error sending message :", err)
 		}
 	}
 
 	if mes != nil {
-		guild := discord.NewGuild(0, mes.ChannelID, mes.ID, true)
-		guild.SetDisplayInfo(discord.NewDisplay([]sql.Server{}, 0))
+		guild := class.InitGuild(0, mes.ChannelID, mes.ID, true)
+		guild.SetDisplayInfo(class.NewDisplay([]model.Server{}, 0))
 		discord.Guilds[os.Getenv("DISCORD_GUILD_ID")] = guild
 	}
 }
 
 func appCommands() error {
-	existingCommands, err := discord.DG.ApplicationCommands(discord.DG.State.User.ID, "")
+	existingCommands, err := session.DG.ApplicationCommands(session.DG.State.User.ID, "")
 	if err != nil {
 		return err
 	}
 
 	for _, command := range existingCommands {
-		if err := discord.DG.ApplicationCommandDelete(discord.DG.State.User.ID, "", command.ID); err != nil {
+		if err := session.DG.ApplicationCommandDelete(session.DG.State.User.ID, "", command.ID); err != nil {
 			return err
 		}
 	}
 
 	for _, command := range commands {
-		_, err = discord.DG.ApplicationCommandCreate(discord.DG.State.User.ID, "", command)
+		_, err = session.DG.ApplicationCommandCreate(session.DG.State.User.ID, "", command)
 		if err != nil {
 			return err
 		}

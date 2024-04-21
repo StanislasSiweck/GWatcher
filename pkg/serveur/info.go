@@ -1,7 +1,7 @@
 package serveur
 
 import (
-	"bot-serveur-info/sql"
+	"bot-serveur-info/internal/pkg/sql/model"
 	"fmt"
 	"github.com/bwmarrin/discordgo"
 	"github.com/rumblefrog/go-a2s"
@@ -27,12 +27,14 @@ type ServerInfo struct {
 	Ping       int      `json:"ping"`
 }
 
-func GetServerInfo(server sql.Server) (info *a2s.ServerInfo, err error) {
+func GetServerInfo(server model.Server) (info *a2s.ServerInfo, err error) {
 	// initiating a new All-2-Steam client with the server's IP and port
 	client, err := a2s.NewClient(server.IP + ":" + server.Port)
 	if err != nil {
 		return
 	}
+
+	defer client.Close()
 
 	// querying the server info from the client
 	info, err = client.QueryInfo()
@@ -42,7 +44,7 @@ func GetServerInfo(server sql.Server) (info *a2s.ServerInfo, err error) {
 	return
 }
 
-func CreateField(info *a2s.ServerInfo, server sql.Server) *discordgo.MessageEmbedField {
+func CreateField(info *a2s.ServerInfo, server model.Server) *discordgo.MessageEmbedField {
 	// determines whether the server is password-protected
 	isPassword := "🔓"
 	if info.Visibility {
