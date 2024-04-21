@@ -49,12 +49,10 @@ func CreateField(info *a2s.ServerInfo, server sql.Server) *discordgo.MessageEmbe
 		isPassword = "🔒"
 	}
 
-	// creates the message Discord field's value
 	value := fmt.Sprintf("👥 ┃ Players connected `%v/%v` \n", info.Players, info.MaxPlayers)
 	value += fmt.Sprintf("🌍 ┃ Map `%v` \n", info.Map)
 	value += fmt.Sprintf("📡 ┃ **steam://connect/%v:%v**", server.IP, server.Port)
 
-	// creates a new Discord message field with the specified name and value
 	Field := &discordgo.MessageEmbedField{
 		Name:  fmt.Sprintf("%v %v", info.Name, isPassword),
 		Value: value,
