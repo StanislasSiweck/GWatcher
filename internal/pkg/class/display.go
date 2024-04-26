@@ -1,22 +1,16 @@
-package discord
+package class
 
 import (
-	"bot-serveur-info/serveur"
-	"bot-serveur-info/sql"
+	"bot-serveur-info/internal/pkg/sql/model"
+	"bot-serveur-info/pkg/serveur"
 	"github.com/bwmarrin/discordgo"
 	"strconv"
 	"time"
 )
 
 type DisplayInfo struct {
-	servers []sql.Server
-	page    int
-}
-
-type Server struct {
-	//Name *string
-	IP   string
-	Port string
+	servers []model.Server
+	Page    int
 }
 
 var (
@@ -36,25 +30,37 @@ var (
 	}
 )
 
-func NewDisplay(servers []sql.Server, page int) DisplayInfo {
+func NewDisplay(servers []model.Server, page int) DisplayInfo {
 	return DisplayInfo{
 		servers: servers,
-		page:    page,
+		Page:    page,
 	}
 }
 
-func (d *DisplayInfo) maxPage() int {
+func (d *DisplayInfo) NextPage() {
+	if d.Page < d.MaxPage()-1 {
+		d.Page++
+	}
+}
+
+func (d *DisplayInfo) PreviousPage() {
+	if d.Page > 0 {
+		d.Page--
+	}
+}
+
+func (d *DisplayInfo) MaxPage() int {
 	return (len(d.servers) / 2) + len(d.servers)%2
 }
 
-func (d *DisplayInfo) AddServer(server sql.Server) {
-	d.servers = append(d.servers, sql.Server{
+func (d *DisplayInfo) AddServer(server model.Server) {
+	d.servers = append(d.servers, model.Server{
 		IP:   server.IP,
 		Port: server.Port,
 	})
 }
 
-func (d *DisplayInfo) RemoveServer(server sql.Server) {
+func (d *DisplayInfo) RemoveServer(server model.Server) {
 	for i, s := range d.servers {
 		if s.IP == server.IP && s.Port == server.Port {
 			d.servers = append(d.servers[:i], d.servers[i+1:]...)
@@ -74,7 +80,7 @@ func (d *DisplayInfo) HasServer(IP, Port string) bool {
 
 func (d *DisplayInfo) Fields() (Fields []*discordgo.MessageEmbedField) {
 	for count, server := range d.servers {
-		if count < d.page*2 || count > d.page*2+1 {
+		if count < d.Page*2 || count > d.Page*2+1 {
 			continue
 		}
 
@@ -99,12 +105,12 @@ func (d *DisplayInfo) UpdateMessage() *discordgo.MessageEdit {
 	fields := d.Fields()
 
 	left := constLeft
-	if d.page == 0 {
+	if d.Page == 0 {
 		left.Disabled = true
 	}
 
 	right := constRight
-	if d.page == d.maxPage()-1 {
+	if d.Page == d.MaxPage()-1 {
 		right.Disabled = true
 	}
 
@@ -127,7 +133,7 @@ func (d *DisplayInfo) UpdateMessage() *discordgo.MessageEdit {
 			},
 		},
 		Embed: &discordgo.MessageEmbed{
-			Title:       "Server watch list (Page " + strconv.Itoa(d.page+1) + "/" + strconv.Itoa(d.maxPage()) + ")",
+			Title:       "Server watch list (Page " + strconv.Itoa(d.Page+1) + "/" + strconv.Itoa(d.MaxPage()) + ")",
 			Description: "━━━━━━━━━━━━━━━━━━━━━━━━",
 			Color:       0x5ad65c,
 			Footer: &discordgo.MessageEmbedFooter{

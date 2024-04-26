@@ -1,4 +1,4 @@
-package discord
+package session
 
 import (
 	"github.com/bwmarrin/discordgo"
@@ -8,11 +8,6 @@ import (
 
 var DG *discordgo.Session
 
-// NewAuth initiates a new discordgo session with the provided Discord token.
-// The token is fetched from the "DISCORD_TOKEN" environment variable.
-// If there is an error while creating or opening the session, the function
-// will terminate the program and log the encountered error.
-// Returns a discordgo session object if the process is successful.
 func NewAuth() {
 	// Replace "YOUR_TOKEN" with your Discord token
 	token := os.Getenv("DISCORD_TOKEN")
