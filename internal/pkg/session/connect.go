@@ -1,8 +1,9 @@
 package session
 
 import (
+	"bot-serveur-info/pkg/logger"
 	"github.com/bwmarrin/discordgo"
-	"log"
+	"github.com/lmittmann/tint"
 	"os"
 )
 
@@ -16,12 +17,12 @@ func NewAuth() {
 	// Create a Discord session
 	DG, err = discordgo.New("Bot " + token)
 	if err != nil {
-		log.Fatal("Error creating Discord session :", err)
+		logger.Fatal("Can't creating Discord session", tint.Err(err))
 	}
 
 	// Attempt to open the Discord session
 	err = DG.Open()
 	if err != nil {
-		log.Fatal("Error opening Discord session :", err)
+		logger.Fatal("Can't opening Discord session", tint.Err(err))
 	}
 }

@@ -15,14 +15,14 @@ type DisplayInfo struct {
 
 var (
 	constRight = discordgo.Button{
-		Emoji: discordgo.ComponentEmoji{
+		Emoji: &discordgo.ComponentEmoji{
 			Name: "➡️",
 		},
 		Style:    discordgo.PrimaryButton,
 		CustomID: "right",
 	}
 	constLeft = discordgo.Button{
-		Emoji: discordgo.ComponentEmoji{
+		Emoji: &discordgo.ComponentEmoji{
 			Name: "⬅️",
 		},
 		Style:    discordgo.PrimaryButton,
@@ -117,12 +117,12 @@ func (d *DisplayInfo) UpdateMessage() *discordgo.MessageEdit {
 	content := ""
 	messageEdit := discordgo.MessageEdit{
 		Content: &content,
-		Components: []discordgo.MessageComponent{
+		Components: &[]discordgo.MessageComponent{
 			discordgo.ActionsRow{
 				Components: []discordgo.MessageComponent{
 					left,
 					discordgo.Button{
-						Emoji: discordgo.ComponentEmoji{
+						Emoji: &discordgo.ComponentEmoji{
 							Name: "🔄",
 						},
 						Style:    discordgo.PrimaryButton,

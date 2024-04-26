@@ -4,6 +4,7 @@ go 1.22
 
 require (
 	github.com/bwmarrin/discordgo v0.28.1
+	github.com/lmittmann/tint v1.0.4
 	github.com/rumblefrog/go-a2s v1.0.2
 	gorm.io/driver/mysql v1.5.6
 	gorm.io/gorm v1.25.10

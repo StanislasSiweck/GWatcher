@@ -7,25 +7,29 @@ import (
 	"bot-serveur-info/internal/pkg/sql"
 	"bot-serveur-info/internal/pkg/sql/model"
 	"bot-serveur-info/internal/pkg/sql/request"
+	"bot-serveur-info/pkg/logger"
 	"github.com/bwmarrin/discordgo"
-	"log"
+	"github.com/lmittmann/tint"
+	"log/slog"
 	"os"
 	"os/signal"
 	"strconv"
 )
 
 func main() {
+	logger.New()
+
 	session.NewAuth()
 	defer session.DG.Close()
 
 	if err := sql.ConnectDB(); err == nil {
 		if err := sql.Migrate(); err != nil {
-			log.Fatal(err)
+			logger.Fatal("Migration goes wrong", tint.Err(err))
 		}
 
 		guilds, err := request.GetGuildsWithServers()
 		if err != nil {
-			log.Fatal(err)
+			logger.Fatal("Guilds cannot recover", tint.Err(err))
 		}
 
 		for _, guild := range guilds {
@@ -37,7 +41,7 @@ func main() {
 
 	err := appCommands()
 	if err != nil {
-		log.Fatal(err)
+		logger.Fatal("The commands could not be modified", tint.Err(err))
 	}
 
 	session.DG.AddHandler(discord.InteractionCreate)
@@ -52,21 +56,26 @@ func main() {
 
 	go discord.RefreshServerInfo()
 
-	log.Println("Bot is now running.  Press CTRL-C to exit.")
+	slog.Info("Bot is now running.  Press CTRL-C to exit.")
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt)
 	<-stop
-	log.Println("Gracefully shutting down")
+	slog.Info("Gracefully shutting down")
 }
 
 func localUsage(err error) {
+	guildId := os.Getenv("DISCORD_GUILD_ID")
+	if guildId == "" {
+		logger.Fatal("The guild ID is not set")
+	}
+
 	var mes *discordgo.Message
 	messageId := os.Getenv("DISCORD_MESSAGE_ID")
 
 	if messageId != "" {
 		mes, err = session.DG.ChannelMessage(os.Getenv("DISCORD_CHANEL_ID"), messageId)
 		if err != nil {
-			log.Fatal("Error getting message :", err)
+			logger.Fatal("Can't get message in local", tint.Err(err))
 		}
 
 		if mes.Author.ID != session.DG.State.User.ID {
@@ -77,14 +86,26 @@ func localUsage(err error) {
 	if mes == nil {
 		mes, err = session.DG.ChannelMessageSend(os.Getenv("DISCORD_CHANEL_ID"), "🤔")
 		if err != nil {
-			log.Fatal("Error sending message :", err)
+			logger.Fatal("Can't send message in local", tint.Err(err))
 		}
 	}
 
 	if mes != nil {
-		guild := class.InitGuild(0, mes.ChannelID, mes.ID, true)
-		guild.SetDisplayInfo(class.NewDisplay([]model.Server{}, 0))
-		discord.Guilds[os.Getenv("DISCORD_GUILD_ID")] = guild
+		channels, err := session.DG.GuildChannels(guildId)
+		if err != nil {
+			logger.Fatal("Can't get guild in local", tint.Err(err))
+		}
+
+		for _, channel := range channels {
+			if channel.ID == os.Getenv("DISCORD_CHANEL_ID") {
+				guild := class.InitGuild(0, mes.ChannelID, mes.ID, true)
+				guild.SetDisplayInfo(class.NewDisplay([]model.Server{}, 0))
+				discord.Guilds[os.Getenv("DISCORD_GUILD_ID")] = guild
+				return
+			}
+		}
+
+		logger.Fatal("The channel ID is not in the guild")
 	}
 }
 
