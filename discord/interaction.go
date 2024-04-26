@@ -1,46 +1,34 @@
 package discord
 
 import (
-	"bot-serveur-info/serveur"
 	"bot-serveur-info/sql"
+	"fmt"
 	"github.com/bwmarrin/discordgo"
 	"log"
 	"strconv"
 	"time"
 )
 
-var AllServers = []sql.Server{}
-var Mes *discordgo.Message
-var page = 0
+var Guilds = map[string]Guild{}
 
 var (
-	constRight = discordgo.Button{
-		Emoji: discordgo.ComponentEmoji{
-			Name: "➡️",
+	commandsHandlers = map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate) Guild{
+		"server add": func(s *discordgo.Session, i *discordgo.InteractionCreate) Guild {
+			return addServerCommand(s, i)
 		},
-		Style:    discordgo.PrimaryButton,
-		CustomID: "right",
-	}
-	constLeft = discordgo.Button{
-		Emoji: discordgo.ComponentEmoji{
-			Name: "⬅️",
+		"server remove": func(s *discordgo.Session, i *discordgo.InteractionCreate) Guild {
+			return removeServerCommand(s, i)
 		},
-		Style:    discordgo.PrimaryButton,
-		CustomID: "left",
-	}
-)
-
-var (
-	commandsHandlers = map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate){
-		"server add": func(s *discordgo.Session, i *discordgo.InteractionCreate) {
-			addServerCommand(s, i)
-		},
-		"server remove": func(s *discordgo.Session, i *discordgo.InteractionCreate) {
-			removeServerCommand(s, i)
+		"server message": func(s *discordgo.Session, i *discordgo.InteractionCreate) Guild {
+			return sendMessage(s, i)
 		},
 	}
-	componentsHandlers = map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate){
-		"update": func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	componentsHandlers = map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate) Guild{
+		"update": func(s *discordgo.Session, i *discordgo.InteractionCreate) Guild {
+			guild, done := foundGuild(s, i)
+			if done {
+				return Guild{}
+			}
 			response := &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
@@ -49,37 +37,75 @@ var (
 				},
 			}
 			_ = s.InteractionRespond(i.Interaction, response)
-			ServerInfo()
+			return guild
 		},
-		"right": func(s *discordgo.Session, i *discordgo.InteractionCreate) {
-			page++
+		"right": func(s *discordgo.Session, i *discordgo.InteractionCreate) Guild {
+			guild, done := foundGuild(s, i)
+			if done {
+				return Guild{}
+			}
+			guild.infos.page++
+			Guilds[i.GuildID] = guild
+
 			response := &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
-					Content: "Page " + strconv.Itoa(page+1),
+					Content: "Page " + strconv.Itoa(guild.infos.page+1),
 					Flags:   discordgo.MessageFlagsEphemeral,
 				},
 			}
 			_ = s.InteractionRespond(i.Interaction, response)
-			ServerInfo()
+			return guild
 		},
-		"left": func(s *discordgo.Session, i *discordgo.InteractionCreate) {
-			if page == 0 {
-				return
+		"left": func(s *discordgo.Session, i *discordgo.InteractionCreate) Guild {
+			guild, done := foundGuild(s, i)
+			if done {
+				return Guild{}
 			}
-			page--
+			guild.infos.page--
+			Guilds[i.GuildID] = guild
+
 			response := &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
-					Content: "Page " + strconv.Itoa(page+1),
+					Content: "Page " + strconv.Itoa(guild.infos.page+1),
 					Flags:   discordgo.MessageFlagsEphemeral,
 				},
 			}
 			_ = s.InteractionRespond(i.Interaction, response)
-			ServerInfo()
+			return guild
 		},
 	}
 )
+
+func GuildCreate(_ *discordgo.Session, g *discordgo.GuildCreate) {
+	_, ok := Guilds[g.ID]
+	if ok {
+		return
+	}
+	guildID, err := strconv.Atoi(g.ID)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	guild := CreateGuild(uint(guildID), "", "")
+	guild.SetDisplayInfo(NewDisplay([]sql.Server{}, 0))
+	Guilds[g.ID] = guild
+}
+
+func GuildDelete(_ *discordgo.Session, g *discordgo.GuildDelete) {
+	_, ok := Guilds[g.ID]
+	if !ok {
+		return
+	}
+
+	if err := sql.RemoveGuild(g.ID); err != nil {
+		log.Println(err)
+		return
+	}
+
+	delete(Guilds, g.ID)
+}
 
 func InteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 
@@ -92,27 +118,77 @@ func InteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			command = data.Name + " " + data.Options[0].Name
 		}
 		if h, ok := commandsHandlers[command]; ok {
-			h(s, i)
+			guild := h(s, i)
+			if guild.messageID != "" {
+				DisplayServerInfo(guild)
+			}
 		}
 	case discordgo.InteractionMessageComponent:
 		if h, ok := componentsHandlers[i.MessageComponentData().CustomID]; ok {
-			h(s, i)
+			guild := h(s, i)
+			if guild.messageID != "" {
+				DisplayServerInfo(guild)
+			}
 		}
 	}
 }
 
-func addServerCommand(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	appOption := i.ApplicationCommandData().Options[0]
-	server := sql.Server{
-		IP:   appOption.Options[0].StringValue(),
-		Port: appOption.Options[1].StringValue(),
+func sendMessage(s *discordgo.Session, i *discordgo.InteractionCreate) Guild {
+	mes, err := DG.ChannelMessageSend(i.ChannelID, "🤔")
+	if err != nil {
+		log.Fatal("Error sending message :", err)
 	}
 
-	if err := sql.AddServer(server); err != nil { // Create the server in the database
+	guild, done := foundGuild(s, i)
+	if done {
+		log.Println("Guild not found")
+		return Guild{}
+	}
+	guild.chanelID = mes.ChannelID
+	guild.messageID = mes.ID
+	if err := guild.UpdateGuild(); err != nil {
 		log.Println(err)
+		return Guild{}
+	}
+	Guilds[i.GuildID] = guild
+	return guild
+}
+
+func addServerCommand(s *discordgo.Session, i *discordgo.InteractionCreate) Guild {
+	guild, done := foundGuild(s, i)
+	if done {
+		return Guild{}
 	}
 
-	AllServers = append(AllServers, server) // Add to local list
+	appOption := i.ApplicationCommandData().Options[0]
+
+	IP, Port := appOption.Options[0].StringValue(), appOption.Options[1].StringValue()
+
+	if guild.HasServer(IP, Port) {
+		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Flags:   discordgo.MessageFlagsEphemeral,
+				Content: "Server already existed",
+			},
+		})
+		if err != nil {
+			log.Println(err)
+		}
+		return Guild{}
+	}
+
+	server := sql.Server{
+		IP:   IP,
+		Port: Port,
+	}
+
+	if _, err := guild.AddServer(server); err != nil { // Create the server in the database
+		log.Println(err)
+		return Guild{}
+	}
+
+	Guilds[i.GuildID] = guild
 
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{ // Send response to Discord
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -123,23 +199,41 @@ func addServerCommand(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	})
 	if err != nil {
 		log.Println(err)
+		return Guild{}
 	}
+
+	return guild
 }
 
-func removeServerCommand(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	appOption := i.ApplicationCommandData().Options[0]
-
-	for i, server := range AllServers {
-		if server.IP == appOption.Options[0].StringValue() && server.Port == appOption.Options[1].StringValue() {
-			AllServers = append(AllServers[:i], AllServers[i+1:]...)
-			break
-		}
+func removeServerCommand(s *discordgo.Session, i *discordgo.InteractionCreate) Guild {
+	guild, done := foundGuild(s, i)
+	if done {
+		return Guild{}
 	}
+
+	appOption := i.ApplicationCommandData().Options[0]
 	ip, port := appOption.Options[0].StringValue(), appOption.Options[1].StringValue()
 
-	if err := sql.RemoveServer(ip, port); err != nil { // Remove from database
-		log.Println(err)
+	if !guild.HasServer(ip, port) {
+		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Flags:   discordgo.MessageFlagsEphemeral,
+				Content: "Server don't exist",
+			},
+		})
+		if err != nil {
+			log.Println(err)
+		}
+		return Guild{}
 	}
+
+	if _, err := guild.RemoveServer(sql.Server{IP: ip, Port: port}); err != nil { // Remove from database
+		log.Println(err)
+		return Guild{}
+	}
+
+	Guilds[i.GuildID] = guild
 
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{ // Send response to Discord
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -150,7 +244,10 @@ func removeServerCommand(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	})
 	if err != nil {
 		log.Println(err)
+		return Guild{}
 	}
+
+	return guild
 }
 
 func RefreshServerInfo() {
@@ -161,79 +258,42 @@ func RefreshServerInfo() {
 }
 
 func ServerInfo() {
-	var Fields []*discordgo.MessageEmbedField
-	for count, server := range AllServers {
-		if count < page*2 || count > page*2+1 {
-			continue
-		}
+	for _, guild := range Guilds {
+		DisplayServerInfo(guild)
+	}
+}
 
-		var field *discordgo.MessageEmbedField
-		info, err := serveur.GetServerInfo(server)
+func DisplayServerInfo(guild Guild) {
+	mes, err := DG.ChannelMessage(guild.chanelID, guild.messageID)
+	if err != nil {
+		fmt.Println("error while fetching message: ", err)
+		return
+	}
+
+	messageUpdate := guild.infos.UpdateMessage()
+	messageUpdate.ID = mes.ID
+	messageUpdate.Channel = mes.ChannelID
+
+	_, err = DG.ChannelMessageEditComplex(messageUpdate)
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
+func foundGuild(s *discordgo.Session, i *discordgo.InteractionCreate) (Guild, bool) {
+	guild, ok := Guilds[i.GuildID]
+	if !ok {
+		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Flags:   discordgo.MessageFlagsEphemeral,
+				Content: "Guild not found",
+			},
+		})
 		if err != nil {
 			log.Println(err)
-			field = &discordgo.MessageEmbedField{
-				Name:  "Error",
-				Value: "Error while fetching server info",
-			}
-		} else {
-			field = serveur.CreateField(info, server)
 		}
-
-		Fields = append(Fields, field)
-
+		return Guild{}, true
 	}
-
-	maxPage := len(AllServers) / 2
-
-	// check modulo
-	if len(AllServers)%2 == 1 {
-		maxPage++
-	}
-
-	left := constLeft
-	if page == 0 {
-		left.Disabled = true
-	}
-
-	right := constRight
-	if page == maxPage-1 {
-		right.Disabled = true
-	}
-
-	// edit a Discord message with the specified fields
-	content := ""
-	messageEdit := discordgo.MessageEdit{
-		Content: &content,
-		ID:      Mes.ID,
-		Channel: Mes.ChannelID,
-		Components: []discordgo.MessageComponent{
-			discordgo.ActionsRow{
-				Components: []discordgo.MessageComponent{
-					left,
-					discordgo.Button{
-						Emoji: discordgo.ComponentEmoji{
-							Name: "🔄",
-						},
-						Style:    discordgo.PrimaryButton,
-						CustomID: "update",
-					},
-					right,
-				},
-			},
-		},
-		Embed: &discordgo.MessageEmbed{
-			Title:       "Server watch list (Page " + strconv.Itoa(page+1) + "/" + strconv.Itoa(maxPage) + ")",
-			Description: "━━━━━━━━━━━━━━━━━━━━━━━━",
-			Color:       0x5ad65c,
-			Footer: &discordgo.MessageEmbedFooter{
-				Text: "Update",
-			},
-			Timestamp: time.Now().Format(time.RFC3339),
-			Fields:    Fields,
-		},
-	}
-	_, err := DG.ChannelMessageEditComplex(&messageEdit)
-	if err != nil {
-		log.Fatal(err)
-	}
+	return guild, false
 }

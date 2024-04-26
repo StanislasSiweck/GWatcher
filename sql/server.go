@@ -14,14 +14,24 @@ type Server struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	DeletedAt gorm.DeletedAt `gorm:"index"`
+
+	GuildID *uint
 }
 
-// AddServer Add a new server to the database
 func AddServer(server Server) error {
 	return DB.Create(&server).Error
 }
 
-// RemoveServer Remove a server from the database by ip and port
-func RemoveServer(ip, port string) error {
-	return DB.Where("ip = ? AND port = ?", ip, port).Delete(&Server{}).Error
+func GetServerUnScoped(server Server) Server {
+	var s Server
+	DB.Unscoped().Where("ip = ? AND port = ? AND guild_id = ?", server.IP, server.Port, server.GuildID).First(&s)
+	return s
+}
+
+func RestoredServer(server Server) error {
+	return DB.Unscoped().Model(&Server{}).Where("ip = ? AND port = ? AND guild_id = ?", server.IP, server.Port, server.GuildID).Update("deleted_at", nil).Error
+}
+
+func RemoveServer(ip, port string, guidId uint) error {
+	return DB.Where("ip = ? AND port = ? AND guild_id = ?", ip, port, guidId).Delete(&Server{}).Error
 }
