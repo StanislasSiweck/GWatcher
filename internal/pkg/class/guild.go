@@ -14,12 +14,12 @@ type Guild struct {
 	isLocal bool
 }
 
-func CreateGuild(guildId uint, channelID, messageID string) Guild {
+func CreateGuild(guildId uint, channelID, messageID string) (Guild, error) {
 	guild := InitGuild(guildId, channelID, messageID, false)
 	if err := guild.CreateGuild(); err != nil {
-		return Guild{}
+		return Guild{}, err
 	}
-	return guild
+	return guild, nil
 }
 
 func InitGuild(guildId uint, channelID, messageID string, isLocal bool) Guild {
