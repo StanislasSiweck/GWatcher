@@ -1,10 +1,12 @@
 package serveur
 
 import (
-	"bot-serveur-info/internal/pkg/sql/model"
 	"fmt"
+
 	"github.com/bwmarrin/discordgo"
 	"github.com/rumblefrog/go-a2s"
+
+	"bot-serveur-info/internal/pkg/sql/model"
 )
 
 type Player struct {

@@ -2,14 +2,15 @@ package sql
 
 import (
 	"fmt"
-	"github.com/lmittmann/tint"
-	"gorm.io/driver/mysql"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 	"log"
 	"log/slog"
 	"os"
 	"time"
+
+	"github.com/lmittmann/tint"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 var DB *gorm.DB

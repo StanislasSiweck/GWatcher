@@ -1,10 +1,12 @@
 package session
 
 import (
-	"bot-serveur-info/pkg/logger"
+	"os"
+
 	"github.com/bwmarrin/discordgo"
 	"github.com/lmittmann/tint"
-	"os"
+
+	"bot-serveur-info/pkg/logger"
 )
 
 var DG *discordgo.Session

@@ -1,22 +1,47 @@
 package discord
 
 import (
-	"bot-serveur-info/internal/pkg/class"
-	"bot-serveur-info/internal/pkg/session"
-	"github.com/bwmarrin/discordgo"
-	"github.com/lmittmann/tint"
 	"log"
 	"log/slog"
+
+	"github.com/bwmarrin/discordgo"
+	"github.com/lmittmann/tint"
+
+	"bot-serveur-info/internal/pkg/controller"
+	"bot-serveur-info/internal/pkg/session"
 )
 
-func UpdateEmbed(guild class.Guild) {
-	mes, err := session.DG.ChannelMessage(guild.ChanelID, guild.MessageID)
+func AppCommands() error {
+	existingCommands, err := session.DG.ApplicationCommands(session.DG.State.User.ID, "")
+	if err != nil {
+		return err
+	}
+
+	for _, command := range existingCommands {
+		if err := session.DG.ApplicationCommandDelete(session.DG.State.User.ID, "", command.ID); err != nil {
+			return err
+		}
+	}
+
+	for _, command := range commands {
+		_, err = session.DG.ApplicationCommandCreate(session.DG.State.User.ID, "", command)
+		if err != nil {
+			return err
+		}
+	}
+	return err
+}
+
+func UpdateEmbed(guild controller.Guild) {
+	chanelId, messageId := guild.Message()
+	mes, err := session.DG.ChannelMessage(chanelId, messageId)
 	if err != nil {
 		log.Println("error while fetching message: ", err)
 		return
 	}
 
-	messageUpdate := guild.Infos.UpdateMessage()
+	infos := guild.Infos()
+	messageUpdate := infos.UpdateMessage()
 	messageUpdate.ID = mes.ID
 	messageUpdate.Channel = mes.ChannelID
 
@@ -26,13 +51,13 @@ func UpdateEmbed(guild class.Guild) {
 	}
 }
 
-func FoundGuild(s *discordgo.Session, i *discordgo.InteractionCreate, Guilds map[string]class.Guild) (class.Guild, bool) {
+func FoundGuild(s *discordgo.Session, i *discordgo.InteractionCreate, Guilds map[string]controller.Guild) (controller.Guild, bool) {
 	guild, ok := Guilds[i.GuildID]
 	if !ok {
 		if err := BasicResponse(s, i, "Guild not found"); err != nil {
 			slog.Error("Can't send a basic reply", tint.Err(err), "guild_id", i.GuildID)
 		}
-		return class.Guild{}, false
+		return nil, false
 	}
 	return guild, true
 }

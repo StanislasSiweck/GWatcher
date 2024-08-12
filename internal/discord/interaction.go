@@ -1,19 +1,24 @@
 package discord
 
 import (
-	"bot-serveur-info/internal/pkg/class"
+	"log/slog"
+	"os"
+	"strconv"
+	"time"
+
+	"github.com/bwmarrin/discordgo"
+	"github.com/lmittmann/tint"
+
+	"bot-serveur-info/internal/pkg/controller"
+	"bot-serveur-info/internal/pkg/controller/bdd"
+	"bot-serveur-info/internal/pkg/controller/local"
 	"bot-serveur-info/internal/pkg/session"
 	"bot-serveur-info/internal/pkg/sql/model"
 	"bot-serveur-info/internal/pkg/sql/request"
 	"bot-serveur-info/pkg/discord"
-	"github.com/bwmarrin/discordgo"
-	"github.com/lmittmann/tint"
-	"log/slog"
-	"strconv"
-	"time"
 )
 
-var Guilds = map[string]class.Guild{}
+var Guilds = map[string]controller.Guild{}
 
 func GuildCreate(_ *discordgo.Session, g *discordgo.GuildCreate) {
 	_, ok := Guilds[g.ID]
@@ -25,12 +30,17 @@ func GuildCreate(_ *discordgo.Session, g *discordgo.GuildCreate) {
 		slog.Error("Can't convert guild id to int", tint.Err(err), "guild_id", g.ID)
 		return
 	}
-	guild, err := class.CreateGuild(uint(guildID), "", "")
+	var guild controller.Guild
+	if os.Getenv("STORAGE_TYPE") == "local" {
+		guild, err = local.CreateGuild(uint(guildID), "", "")
+	} else {
+		guild, err = bdd.CreateGuild(uint(guildID), "", "")
+	}
 	if err != nil {
-		slog.Error("Can't create guild", tint.Err(err), "guild_id", g.ID)
+		slog.Error("Can't create in ", os.Getenv("storage"), tint.Err(err), "guild_id", g.ID)
 		return
 	}
-	guild.SetDisplayInfo(class.NewDisplay([]model.Server{}, 0))
+	guild.SetDisplayInfo(controller.NewDisplay([]model.Server{}, 0))
 	Guilds[g.ID] = guild
 }
 
@@ -62,12 +72,12 @@ func InteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		if h, ok := commandsHandlers[command]; ok {
 			guild, done := discord.FoundGuild(s, i, Guilds)
 			if !done {
-				slog.Error("Guild not found", "guild_id", i.GuildID)
+				slog.Error("guild not found", "guild_id", i.GuildID)
 				return
 			}
 
 			guild = h(s, i, guild)
-			if guild.MessageID != "" {
+			if guild != nil {
 				discord.UpdateEmbed(guild)
 				Guilds[i.GuildID] = guild
 			}
@@ -76,7 +86,7 @@ func InteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		if h, ok := componentsHandlers[i.MessageComponentData().CustomID]; ok {
 			guild, done := discord.FoundGuild(s, i, Guilds)
 			if !done {
-				slog.Error("Guild not found", "guild_id", i.GuildID)
+				slog.Error("guild not found", "guild_id", i.GuildID)
 				return
 			}
 			guild = h(s, i, guild)
@@ -87,18 +97,17 @@ func InteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	}
 }
 
-func setMessage(s *discordgo.Session, i *discordgo.InteractionCreate, guild class.Guild) class.Guild {
+func setMessage(s *discordgo.Session, i *discordgo.InteractionCreate, guild controller.Guild) controller.Guild {
 	mes, err := session.DG.ChannelMessageSend(i.ChannelID, "🤔")
 	if err != nil {
 		slog.Error("Can't send message", tint.Err(err), "channel_id", i.ChannelID)
-		return class.Guild{}
+		return nil
 	}
 
-	guild.ChanelID = mes.ChannelID
-	guild.MessageID = mes.ID
+	guild.ChangeMessage(i.ChannelID, mes.ID)
 	if err := guild.UpdateGuild(); err != nil {
 		slog.Error("Can't update guild", tint.Err(err), "guild_id", mes.ID)
-		return class.Guild{}
+		return nil
 	}
 
 	if err := discord.BasicResponse(s, i, "Message send"); err != nil {
@@ -109,7 +118,7 @@ func setMessage(s *discordgo.Session, i *discordgo.InteractionCreate, guild clas
 	return guild
 }
 
-func addServerCommand(s *discordgo.Session, i *discordgo.InteractionCreate, guild class.Guild) class.Guild {
+func addServerCommand(s *discordgo.Session, i *discordgo.InteractionCreate, guild controller.Guild) controller.Guild {
 	appOption := i.ApplicationCommandData().Options[0]
 
 	ip, port := appOption.Options[0].StringValue(), appOption.Options[1].StringValue()
@@ -118,7 +127,7 @@ func addServerCommand(s *discordgo.Session, i *discordgo.InteractionCreate, guil
 		if err := discord.BasicResponse(s, i, "Server already existed"); err != nil {
 			slog.Error("Can't send a basic reply", tint.Err(err), "guild_id", i.GuildID)
 		}
-		return class.Guild{}
+		return nil
 	}
 
 	server := model.Server{
@@ -128,7 +137,7 @@ func addServerCommand(s *discordgo.Session, i *discordgo.InteractionCreate, guil
 
 	if _, err := guild.AddServer(server); err != nil { // Create the server in the database
 		slog.Error("Can't add server", tint.Err(err), "IP", ip, "Port", port)
-		return class.Guild{}
+		return nil
 	}
 
 	if err := discord.BasicResponse(s, i, "Server added"); err != nil {
@@ -139,7 +148,7 @@ func addServerCommand(s *discordgo.Session, i *discordgo.InteractionCreate, guil
 	return guild
 }
 
-func removeServerCommand(s *discordgo.Session, i *discordgo.InteractionCreate, guild class.Guild) class.Guild {
+func removeServerCommand(s *discordgo.Session, i *discordgo.InteractionCreate, guild controller.Guild) controller.Guild {
 	appOptions := i.ApplicationCommandData().Options[0]
 	ip, port := appOptions.Options[0].StringValue(), appOptions.Options[1].StringValue()
 
@@ -147,12 +156,12 @@ func removeServerCommand(s *discordgo.Session, i *discordgo.InteractionCreate, g
 		if err := discord.BasicResponse(s, i, "Server don't exist"); err != nil {
 			slog.Error("Can't send a basic reply", tint.Err(err), "guild_id", i.GuildID)
 		}
-		return class.Guild{}
+		return nil
 	}
 
 	if _, err := guild.RemoveServer(model.Server{IP: ip, Port: port}); err != nil { // Remove from database
 		slog.Error("Can't remove server", tint.Err(err), "IP", ip, "Port", port)
-		return class.Guild{}
+		return nil
 	}
 
 	if err := discord.BasicResponse(s, i, "Server removed"); err != nil {

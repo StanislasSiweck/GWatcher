@@ -1,19 +1,24 @@
 package main
 
 import (
-	"bot-serveur-info/internal/discord"
-	"bot-serveur-info/internal/pkg/class"
-	"bot-serveur-info/internal/pkg/session"
-	"bot-serveur-info/internal/pkg/sql"
-	"bot-serveur-info/internal/pkg/sql/model"
-	"bot-serveur-info/internal/pkg/sql/request"
-	"bot-serveur-info/pkg/logger"
-	"github.com/bwmarrin/discordgo"
-	"github.com/lmittmann/tint"
 	"log/slog"
 	"os"
 	"os/signal"
 	"strconv"
+
+	"github.com/bwmarrin/discordgo"
+	"github.com/lmittmann/tint"
+
+	"bot-serveur-info/internal/discord"
+	"bot-serveur-info/internal/pkg/controller"
+	csql "bot-serveur-info/internal/pkg/controller/bdd"
+	clocal "bot-serveur-info/internal/pkg/controller/local"
+	"bot-serveur-info/internal/pkg/session"
+	"bot-serveur-info/internal/pkg/sql"
+	"bot-serveur-info/internal/pkg/sql/model"
+	"bot-serveur-info/internal/pkg/sql/request"
+	pdiscord "bot-serveur-info/pkg/discord"
+	"bot-serveur-info/pkg/logger"
 )
 
 func main() {
@@ -33,13 +38,13 @@ func main() {
 		}
 
 		for _, guild := range guilds {
-			newGuild := class.InitGuild(guild.ID, guild.ChannelID, guild.MessageID, false)
-			newGuild.SetDisplayInfo(class.NewDisplay(guild.Servers, 0))
-			discord.Guilds[strconv.Itoa(int(guild.ID))] = newGuild
+			newGuild := csql.InitGuild(guild.ID, guild.ChannelID, guild.MessageID)
+			newGuild.SetDisplayInfo(controller.NewDisplay(guild.Servers, 0))
+			discord.Guilds[strconv.Itoa(int(guild.ID))] = &newGuild
 		}
 	}
 
-	err := appCommands()
+	err := pdiscord.AppCommands()
 	if err != nil {
 		logger.Fatal("The commands could not be modified", tint.Err(err))
 	}
@@ -64,6 +69,9 @@ func main() {
 }
 
 func localUsage(err error) {
+	if os.Getenv("STORAGE_TYPE") != "local" {
+		logger.Fatal("The storage is not local")
+	}
 	guildId := os.Getenv("DISCORD_GUILD_ID")
 	if guildId == "" {
 		logger.Fatal("The guild ID is not set")
@@ -98,9 +106,9 @@ func localUsage(err error) {
 
 		for _, channel := range channels {
 			if channel.ID == os.Getenv("DISCORD_CHANEL_ID") {
-				guild := class.InitGuild(0, mes.ChannelID, mes.ID, true)
-				guild.SetDisplayInfo(class.NewDisplay([]model.Server{}, 0))
-				discord.Guilds[os.Getenv("DISCORD_GUILD_ID")] = guild
+				guild := clocal.InitGuild(0, mes.ChannelID, mes.ID)
+				guild.SetDisplayInfo(controller.NewDisplay([]model.Server{}, 0))
+				discord.Guilds[os.Getenv("DISCORD_GUILD_ID")] = &guild
 				return
 			}
 		}
@@ -108,78 +116,3 @@ func localUsage(err error) {
 		logger.Fatal("The channel ID is not in the guild")
 	}
 }
-
-func appCommands() error {
-	existingCommands, err := session.DG.ApplicationCommands(session.DG.State.User.ID, "")
-	if err != nil {
-		return err
-	}
-
-	for _, command := range existingCommands {
-		if err := session.DG.ApplicationCommandDelete(session.DG.State.User.ID, "", command.ID); err != nil {
-			return err
-		}
-	}
-
-	for _, command := range commands {
-		_, err = session.DG.ApplicationCommandCreate(session.DG.State.User.ID, "", command)
-		if err != nil {
-			return err
-		}
-	}
-	return err
-}
-
-var (
-	commands = []*discordgo.ApplicationCommand{
-		{
-			Name: "server",
-			Options: []*discordgo.ApplicationCommandOption{
-				{
-					Name:        "message",
-					Description: "Create basic message",
-					Type:        discordgo.ApplicationCommandOptionSubCommand,
-				},
-				{
-					Name:        "add",
-					Description: "Add a server",
-					Type:        discordgo.ApplicationCommandOptionSubCommand,
-					Options: []*discordgo.ApplicationCommandOption{
-						{
-							Name:        "ip",
-							Description: "Server IP",
-							Type:        discordgo.ApplicationCommandOptionString,
-							Required:    true,
-						},
-						{
-							Name:        "port",
-							Description: "Server port",
-							Type:        discordgo.ApplicationCommandOptionString,
-							Required:    true,
-						},
-					},
-				},
-				{
-					Name:        "remove",
-					Description: "Remove a server",
-					Type:        discordgo.ApplicationCommandOptionSubCommand,
-					Options: []*discordgo.ApplicationCommandOption{
-						{
-							Name:        "ip",
-							Description: "Server IP",
-							Type:        discordgo.ApplicationCommandOptionString,
-							Required:    true,
-						},
-						{
-							Name:        "port",
-							Description: "Server port",
-							Type:        discordgo.ApplicationCommandOptionString,
-							Required:    true,
-						},
-					},
-				},
-			},
-			Description: "Add or remove a server",
-		},
-	}
-)

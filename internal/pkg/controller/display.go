@@ -1,11 +1,13 @@
-package class
+package controller
 
 import (
-	"bot-serveur-info/internal/pkg/sql/model"
-	"bot-serveur-info/pkg/serveur"
-	"github.com/bwmarrin/discordgo"
 	"strconv"
 	"time"
+
+	"github.com/bwmarrin/discordgo"
+
+	"bot-serveur-info/internal/pkg/sql/model"
+	"bot-serveur-info/pkg/serveur"
 )
 
 type DisplayInfo struct {
